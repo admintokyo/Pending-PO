@@ -66,6 +66,36 @@ function exportPending(){downloadCSV('Pending_PO_'+today()+'.csv',['No PO','Tang
 function exportReport(){downloadCSV('Laporan_PO_'+today()+'.csv',['No PO','Tanggal','Toko','Sales','Qty PO','Terkirim','Pending'],pos().map(p=>{let s=summary(p);return [p.po_no,p.po_date,p.store,named('sales',p.sales_id),s.qty,s.sent,s.pending]}))}
 async function safeCall(fn){try{await fn()}catch(e){alertToast(errorText(e),true)}}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!sb)return;const btn=$('loginBtn');btn.disabled=true;$('authMessage').textContent='Sedang login...';try{const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});if(error)throw error;await handleAuth();$('authMessage').textContent=''}catch(error){$('authMessage').textContent='Login gagal: '+errorText(error)}finally{btn.disabled=false}});
+// Ganti kata sandi akun sendiri: minta password lama, jangan simpan atau log password.
+function showPasswordForm(){
+ if(!sb || !user){alertToast('Masuk terlebih dahulu untuk mengganti password.',true);return}
+ openModal('Ganti Password',`<form id="passwordForm" autocomplete="off">
+ <p class="dim">Password baru berlaku untuk akun yang sedang masuk.</p>
+ <label for="oldAccountPassword">Password saat ini</label>
+ <input type="password" id="oldAccountPassword" name="old_password" autocomplete="current-password" required minlength="6">
+ <label for="newAccountPassword">Password baru (minimal 10 karakter)</label>
+ <input type="password" id="newAccountPassword" name="new_password" autocomplete="new-password" required minlength="10">
+ <label for="confirmAccountPassword">Ulangi password baru</label>
+ <input type="password" id="confirmAccountPassword" name="confirm_password" autocomplete="new-password" required minlength="10">
+ <div class="btnrow"><button class="primary" type="submit">Simpan Password Baru</button><button class="secondary" type="button" id="cancelForm">Batal</button></div>
+ </form>`);
+}
+async function changePassword(form){
+ if(!sb||!user)throw Error('Sesi login berakhir. Masuk kembali.');
+ const oldPass=form.elements.old_password.value;
+ const nextPass=form.elements.new_password.value;
+ const confirmPass=form.elements.confirm_password.value;
+ if(nextPass.length<10)throw Error('Password baru minimal 10 karakter.');
+ if(nextPass!==confirmPass)throw Error('Pengulangan password baru tidak sama.');
+ if(nextPass===oldPass)throw Error('Password baru harus berbeda dari password lama.');
+ const {data:checked,error:verifyError}=await sb.auth.signInWithPassword({email:user.email,password:oldPass});
+ if(verifyError||checked?.user?.id!==user.id)throw Error('Password saat ini salah. Periksa lagi.');
+ // Supabase melakukan pembaruan hanya untuk akun dengan sesi yang aktif.
+ const {error:updateError}=await sb.auth.updateUser({password:nextPass,current_password:oldPass});
+ if(updateError)throw updateError;
+ form.reset();closeModal();alertToast('Password berhasil diganti. Gunakan password baru saat login berikutnya.');
+}
+$('changePasswordBtn').addEventListener('click',showPasswordForm);
 $('logoutBtn').addEventListener('click',()=>safeCall(async()=>{const {error}=await sb.auth.signOut();if(error)throw error;signedOut()}));
 $('navigation').addEventListener('click',e=>{let b=e.target.closest('[data-page]');if(b)goPage(b.dataset.page)});
 document.querySelectorAll('[data-refresh]').forEach(b=>b.addEventListener('click',()=>loadEverything()));
@@ -76,7 +106,7 @@ $('shipList').addEventListener('click',e=>{let b=e.target.closest('[data-edit-sh
 $('closeModal').addEventListener('click',closeModal);$('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
 $('modalBody').addEventListener('click',e=>{if(e.target.id==='addLine')$('poLines').insertAdjacentHTML('beforeend',poLine());if(e.target.closest('.remove-line'))e.target.closest('.itemrow').remove();if(e.target.id==='cancelForm')closeModal()});
 $('modalBody').addEventListener('change',e=>{if(e.target.id==='shipPo')refreshShipLines(e.target.value)});
-$('modalBody').addEventListener('submit',e=>{e.preventDefault();const form=e.target;const button=form.querySelector('[type=submit]');button.disabled=true;safeCall(async()=>{try{if(form.id==='poForm')await submitPO(form);else if(form.id==='shipForm')await submitShipment(form)}finally{button.disabled=false}})});
+$('modalBody').addEventListener('submit',e=>{e.preventDefault();const form=e.target;const button=form.querySelector('[type=submit]');button.disabled=true;safeCall(async()=>{try{if(form.id==='poForm')await submitPO(form);else if(form.id==='shipForm')await submitShipment(form);else if(form.id==='passwordForm')await changePassword(form)}finally{button.disabled=false}})});
 document.querySelectorAll('[data-master]').forEach(form=>form.addEventListener('submit',e=>{e.preventDefault();safeCall(()=>addMaster(form))}));
 $('master').addEventListener('click',e=>{let b=e.target.closest('[data-master-delete]');if(b)safeCall(()=>delMaster(b.dataset.masterDelete,b.dataset.id))});
 $('master').addEventListener('change',e=>{let s=e.target.closest('[data-profile-sales]');if(s)safeCall(()=>assignSales(s.dataset.profileSales,s.value))});
