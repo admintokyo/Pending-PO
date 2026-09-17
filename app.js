@@ -46,56 +46,111 @@ function pendingRows(){return pos().flatMap(p=>items(p).map(i=>({po:p,line:i,sen
 function renderPending(){let rows=pendingRows().map(r=>`<tr><td>${esc(r.po.po_no)}</td><td>${esc(r.po.store)}</td><td>${esc(named('sales',r.po.sales_id))}</td><td>${esc(named('item_types',r.line.type_id))}</td><td>${fmt(r.line.qty)}</td><td>${fmt(r.sent)}</td><td><b>${fmt(r.remaining)}</b></td></tr>`).join('');$('pendingList').innerHTML=table(['No PO','Toko','Sales','Type Barang','Qty PO','Terkirim','Pending'],rows)}
 function renderDetail(){const old=$('detailSel').value;$('detailSel').innerHTML=poOptions(old);if(!state.purchase_orders.some(p=>p.id===old) && pos()[0])$('detailSel').value=pos()[0].id;const p=state.purchase_orders.find(x=>x.id===$('detailSel').value);if(!p){$('detailContent').innerHTML='<p class="dim">Belum ada PO.</p>';return}let s=summary(p);const rows=items(p).map(i=>`<tr><td>${esc(named('item_types',i.type_id))}</td><td>${fmt(i.qty)}</td><td>${fmt(shippedQty(i.id))}</td><td><b>${fmt(Math.max(0,i.qty-shippedQty(i.id)))}</b></td></tr>`).join('');const deliveries=state.shipments.filter(x=>x.po_id===p.id).map(sh=>`<tr><td>${esc(sh.ship_date)}</td><td>${esc(named('expeditions',sh.expedition_id))}</td><td>${shipmentItems(sh).map(i=>esc(named('item_types',state.po_items.find(l=>l.id===i.po_item_id)?.type_id))+': '+fmt(i.qty)).join('<br>')}</td></tr>`).join('');$('detailContent').innerHTML=`<p><b>${esc(p.po_no)}</b> · ${esc(p.store)} · Sales: ${esc(named('sales',p.sales_id))}</p><div class="cards"><div class="card">Qty PO<div class="value">${fmt(s.qty)}</div></div><div class="card">Terkirim<div class="value">${fmt(s.sent)}</div></div><div class="card">Pending<div class="value">${fmt(s.pending)}</div></div></div><h3>Rincian barang</h3>${table(['Type','Qty PO','Terkirim','Pending'],rows)}<h3>Riwayat pengiriman</h3>${table(['Tanggal','Ekspedisi','Barang / Qty'],deliveries)}`}
 function renderReport(){const t=totals();$('reportContent').innerHTML=`<p class="dim">Tanggal cetak: ${esc(today())} · ${admin()?'Semua PO':'PO dalam akses akun Sales'}</p><div class="reportline">Jumlah PO: <b>${fmt(state.purchase_orders.length)}</b></div><div class="reportline">Total Qty PO: <b>${fmt(t.qty)}</b></div><div class="reportline">Total Qty terkirim: <b>${fmt(t.sent)}</b></div><div class="reportline">Total Qty pending: <b>${fmt(t.pending)}</b></div><h3>Rincian per PO</h3>${table(['No PO','Tanggal','Toko','Sales','Qty PO','Terkirim','Pending'],pos().map(p=>{let s=summary(p);return `<tr><td>${esc(p.po_no)}</td><td>${esc(p.po_date)}</td><td>${esc(p.store)}</td><td>${esc(named('sales',p.sales_id))}</td><td>${fmt(s.qty)}</td><td>${fmt(s.sent)}</td><td>${fmt(s.pending)}</td></tr>`}).join(''))}`}
-function renderMasters(){for(const [tbl,id] of [['sales','salesList'],['item_types','typesList'],['expeditions','expList']]){$(id).innerHTML=state[tbl].map(x=>`<div class="mutelist"><span>${esc(x.name)}</span><button class="danger" data-master-delete="${tbl}" data-id="${x.id}">Hapus</button></div>`).join('')||'<p class="dim">Belum ada data.</p>'}let salesOpts=options(state.sales,null,'Belum ditautkan');$('profileList').innerHTML=state.profiles.map(p=>`<div class="mutelist" style="display:block"><b>${esc(p.display_name||p.email)}</b><div class="dim">${esc(p.email)} · ${esc(p.role)}</div>${p.role==='sales'?`<label>Tautkan akun ke Sales</label><select data-profile-sales="${p.id}">${options(state.sales,p.sales_id,'Belum ditautkan')}</select>`:''}</div>`).join('')||'<p class="dim">Belum ada akun.</p>'}
+function renderMasters(){for(const [tbl,id] of [['sales','salesList'],['item_types','typesList']]){$(id).innerHTML=state[tbl].map(x=>`<div class="mutelist"><span>${esc(x.name)}</span><button class="danger" data-master-delete="${tbl}" data-id="${x.id}">Hapus</button></div>`).join('')||'<p class="dim">Belum ada data.</p>'}let salesOpts=options(state.sales,null,'Belum ditautkan');$('profileList').innerHTML=state.profiles.map(p=>`<div class="mutelist" style="display:block"><b>${esc(p.display_name||p.email)}</b><div class="dim">${esc(p.email)} · ${esc(p.role)}</div>${p.role==='sales'?`<label>Tautkan akun ke Sales</label><select data-profile-sales="${p.id}">${options(state.sales,p.sales_id,'Belum ditautkan')}</select>`:''}</div>`).join('')||'<p class="dim">Belum ada akun.</p>'}
 function poLine(typeId='',qty=''){return `<div class="itemrow"><select class="po-type" required>${options(state.item_types,typeId,'Pilih type barang')}</select><input class="po-qty" type="number" min="1" step="1" required placeholder="Qty" value="${esc(qty)}"><button class="danger remove-line" type="button" title="Hapus baris">×</button></div>`}
 function showPO(id=null){let p=id?state.purchase_orders.find(x=>x.id===id):null;if(p && !ownPO(p)){alertToast('Tidak memiliki izin mengubah PO ini.',true);return}if(!state.sales.length||!state.item_types.length){alertToast('Admin harus menambahkan Sales dan Type Barang terlebih dahulu.',true);return}if(!admin()&&!me.sales_id){alertToast('Akun belum ditautkan ke nama Sales. Hubungi Admin.',true);return}modalEditingPO=id;
  let salesChoice=p?.sales_id||(admin()?state.sales[0].id:me.sales_id);let salesRows=admin()?state.sales:state.sales.filter(x=>x.id===me.sales_id);let poLines=p?items(p).map(i=>poLine(i.type_id,i.qty)).join(''):poLine();
  openModal(p?'Edit PO':'Tambah PO',`<form id="poForm"><div class="grid2"><div><label>No PO</label><input name="po_no" required maxlength="100" value="${esc(p?.po_no||'')}" placeholder="PO-001"></div><div><label>Tanggal</label><input name="po_date" type="date" required value="${esc(p?.po_date||today())}"></div><div><label>Nama Toko (ketik langsung)</label><input name="store" required maxlength="150" value="${esc(p?.store||'')}" placeholder="Nama toko"></div><div><label>Sales</label><select name="sales_id" required>${options(salesRows,salesChoice,'Pilih sales')}</select></div></div><h3>Barang dalam PO</h3><div id="poLines">${poLines}</div><div class="btnrow"><button type="button" class="secondary" id="addLine">＋ Tambah Barang</button></div><div class="notice warn">Jika barang sudah pernah dikirim, type barang tidak bisa dihapus dan Qty tidak bisa dikurangi di bawah jumlah terkirim.</div><div class="btnrow"><button type="submit" class="primary">Simpan PO</button><button type="button" class="secondary" id="cancelForm">Batal</button></div></form>`)}
 async function submitPO(form){const fd=new FormData(form);let parts=[...$('poLines').querySelectorAll('.itemrow')].map(r=>({type_id:r.querySelector('.po-type').value,qty:Number(r.querySelector('.po-qty').value)}));if(!parts.length||parts.some(x=>!x.type_id||!Number.isSafeInteger(x.qty)||x.qty<=0))throw Error('Isi minimal satu Type Barang dan Qty positif.');if(new Set(parts.map(x=>x.type_id)).size!==parts.length)throw Error('Type Barang tidak boleh sama dalam satu PO.');let {error}=await sb.rpc('save_po',{p_id:modalEditingPO,p_no:fd.get('po_no').trim(),p_date:fd.get('po_date'),p_store:fd.get('store').trim(),p_sales:fd.get('sales_id'),p_items:parts});if(error)throw error;closeModal();await loadEverything();alertToast('PO berhasil disimpan ke cloud.')}
 function shipLine(line,qty=''){const rem=Math.max(0,line.qty-shippedQty(line.id,modalEditingShipment));return `<div class="itemrow" data-line="${line.id}"><span>${esc(named('item_types',line.type_id))}<br><small>Sisa yang dapat dikirim: ${fmt(rem)}</small></span><input type="number" class="shipqty" min="0" max="${rem}" step="1" value="${esc(qty)}" placeholder="Qty" aria-label="Qty kirim ${esc(named('item_types',line.type_id))}"><span class="dim">pcs</span></div>`}
-function showShipment(id=null){if(!admin())return;if(!pos().length||!state.expeditions.length){alertToast('Buat PO dan tambahkan Ekspedisi terlebih dahulu.',true);return}let ship=id?state.shipments.find(s=>s.id===id):null;modalEditingShipment=id;let poId=ship?.po_id||pos()[0].id;let p=state.purchase_orders.find(p=>p.id===poId);let oldMap=new Map(ship?shipmentItems(ship).map(si=>[si.po_item_id,si.qty]):[]);openModal(ship?'Edit Pengiriman':'Tambah Pengiriman',`<form id="shipForm"><label>PO</label><select name="po_id" id="shipPo" ${ship?'disabled':''} required>${poOptions(poId)}</select><div class="grid2"><div><label>Tanggal Kirim</label><input type="date" name="ship_date" value="${esc(ship?.ship_date||today())}" required></div><div><label>Ekspedisi</label><select name="expedition_id" required>${options(state.expeditions,ship?.expedition_id||state.expeditions[0].id)}</select></div></div><h3>Qty Pengiriman per Barang</h3><div id="shipLines">${items(p).map(i=>shipLine(i,oldMap.get(i.id)||'')).join('')}</div><div class="notice">Total pengiriman tiap barang tidak boleh melebihi Qty PO. Server juga memvalidasinya.</div><div class="btnrow"><button type="submit" class="primary">Simpan Pengiriman</button><button type="button" class="secondary" id="cancelForm">Batal</button></div></form>`)}
+function showShipment(id=null){if(!admin())return;if(!pos().length){alertToast('Buat PO terlebih dahulu.',true);return}let ship=id?state.shipments.find(s=>s.id===id):null;modalEditingShipment=id;let poId=ship?.po_id||pos()[0].id;let p=state.purchase_orders.find(p=>p.id===poId);let oldMap=new Map(ship?shipmentItems(ship).map(si=>[si.po_item_id,si.qty]):[]);openModal(ship?'Edit Pengiriman':'Tambah Pengiriman',`<form id="shipForm"><label>PO</label><select name="po_id" id="shipPo" ${ship?'disabled':''} required>${poOptions(poId)}</select><div class="grid2"><div><label>Tanggal Kirim</label><input type="date" name="ship_date" value="${esc(ship?.ship_date||today())}" required></div><div><label>Ekspedisi</label><input name="expedition_name" required maxlength="150" placeholder="Ketik nama ekspedisi" value="${esc(ship?named('expeditions',ship.expedition_id):'')}" autocomplete="off"></div></div><h3>Qty Pengiriman per Barang</h3><div id="shipLines">${items(p).map(i=>shipLine(i,oldMap.get(i.id)||'')).join('')}</div><div class="notice">Total pengiriman tiap barang tidak boleh melebihi Qty PO. Server juga memvalidasinya.</div><div class="btnrow"><button type="submit" class="primary">Simpan Pengiriman</button><button type="button" class="secondary" id="cancelForm">Batal</button></div></form>`)}
 function refreshShipLines(poId){let p=state.purchase_orders.find(x=>x.id===poId);$('shipLines').innerHTML=p?items(p).map(i=>shipLine(i)).join(''):''}
-async function submitShipment(form){if(!admin())throw Error('Hanya Admin yang boleh mencatat pengiriman.');let fd=new FormData(form);let poId=modalEditingShipment?state.shipments.find(s=>s.id===modalEditingShipment)?.po_id:fd.get('po_id');let parts=[...$('shipLines').querySelectorAll('.itemrow')].map(r=>({po_item_id:r.dataset.line,qty:Number(r.querySelector('.shipqty').value||0)}));if(parts.some(x=>!Number.isSafeInteger(x.qty)||x.qty<0))throw Error('Qty harus bilangan bulat non-negatif.');parts=parts.filter(x=>x.qty>0);if(!parts.length)throw Error('Isi minimal satu Qty pengiriman yang lebih dari 0.');let {error}=await sb.rpc('save_shipment',{p_id:modalEditingShipment,p_po:poId,p_date:fd.get('ship_date'),p_exp:fd.get('expedition_id'),p_items:parts});if(error)throw error;closeModal();await loadEverything();alertToast('Pengiriman tersimpan. Pending diperbarui.')}
+async function submitShipment(form){if(!admin())throw Error('Hanya Admin yang boleh mencatat pengiriman.');let fd=new FormData(form);let poId=modalEditingShipment?state.shipments.find(s=>s.id===modalEditingShipment)?.po_id:fd.get('po_id');let parts=[...$('shipLines').querySelectorAll('.itemrow')].map(r=>({po_item_id:r.dataset.line,qty:Number(r.querySelector('.shipqty').value||0)}));if(parts.some(x=>!Number.isSafeInteger(x.qty)||x.qty<0))throw Error('Qty harus bilangan bulat non-negatif.');parts=parts.filter(x=>x.qty>0);if(!parts.length)throw Error('Isi minimal satu Qty pengiriman yang lebih dari 0.');let expeditionName=String(fd.get('expedition_name')||'').trim().replace(/\s+/g,' ');
+ if(!expeditionName||expeditionName.length>150)throw Error('Nama ekspedisi wajib diisi (maksimal 150 karakter).');
+ let expedition=state.expeditions.find(x=>x.name.toLocaleLowerCase('id-ID')===expeditionName.toLocaleLowerCase('id-ID'));
+ if(!expedition){
+  const created=await sb.from('expeditions').insert({name:expeditionName}).select('id,name').single();
+  if(created.error){
+   if(created.error.code!=='23505')throw created.error;
+   const found=await sb.from('expeditions').select('id,name').eq('name',expeditionName).single();
+   if(found.error)throw found.error;
+   expedition=found.data;
+  }else expedition=created.data;
+ }
+ let {error}=await sb.rpc('save_shipment',{p_id:modalEditingShipment,p_po:poId,p_date:fd.get('ship_date'),p_exp:expedition.id,p_items:parts});if(error)throw error;closeModal();await loadEverything();alertToast('Pengiriman tersimpan. Pending diperbarui.')}
 async function deletePO(id){if(!admin())return;const p=state.purchase_orders.find(x=>x.id===id);if(!p||!confirm(`Hapus PO ${p.po_no} termasuk seluruh pengirimannya? Tindakan ini tidak dapat dibatalkan.`))return;const {error}=await sb.rpc('delete_po',{p_id:id});if(error)throw error;await loadEverything();alertToast('PO berhasil dihapus.')}
 async function deleteShipment(id){if(!admin())return;if(!confirm('Hapus pengiriman ini? Qty pending akan dihitung ulang.'))return;let {error}=await sb.from('shipments').delete().eq('id',id);if(error)throw error;await loadEverything();alertToast('Pengiriman berhasil dihapus.')}
 async function addMaster(form){if(!admin())return;let tbl=form.dataset.master;let name=form.elements.name.value.trim();if(!name)throw Error('Nama tidak boleh kosong.');const {error}=await sb.from(tbl).insert({name});if(error)throw error;form.reset();await loadEverything();alertToast('Data master berhasil ditambah.')}
-async function delMaster(tbl,id){if(!admin()||!['sales','item_types','expeditions'].includes(tbl)||!confirm('Hapus data master ini? Data yang sedang digunakan tidak dapat dihapus.'))return;let {error}=await sb.from(tbl).delete().eq('id',id);if(error)throw error;await loadEverything();alertToast('Data master dihapus.')}
+async function delMaster(tbl,id){if(!admin()||!['sales','item_types'].includes(tbl)||!confirm('Hapus data master ini? Data yang sedang digunakan tidak dapat dihapus.'))return;let {error}=await sb.from(tbl).delete().eq('id',id);if(error)throw error;await loadEverything();alertToast('Data master dihapus.')}
 async function assignSales(profileId,salesId){if(!admin())return;let {error}=await sb.from('profiles').update({sales_id:salesId||null}).eq('id',profileId);if(error)throw error;await loadEverything();alertToast('Hak akses akun Sales diperbarui.')}
 function downloadCSV(name,headers,rows){let csv='\ufeff'+[headers,...rows].map(line=>line.map(x=>'"'+String(x??'').replace(/"/g,'""').replace(/^[=+@\-\t\r]/,m=>"'"+m)+'"').join(',')).join('\r\n');let link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)}
 function exportPending(){downloadCSV('Pending_PO_'+today()+'.csv',['No PO','Tanggal PO','Toko','Sales','Type Barang','Qty PO','Terkirim','Pending'],pendingRows().map(r=>[r.po.po_no,r.po.po_date,r.po.store,named('sales',r.po.sales_id),named('item_types',r.line.type_id),r.line.qty,r.sent,r.remaining]))}
 function exportReport(){downloadCSV('Laporan_PO_'+today()+'.csv',['No PO','Tanggal','Toko','Sales','Qty PO','Terkirim','Pending'],pos().map(p=>{let s=summary(p);return [p.po_no,p.po_date,p.store,named('sales',p.sales_id),s.qty,s.sent,s.pending]}))}
 async function safeCall(fn){try{await fn()}catch(e){alertToast(errorText(e),true)}}
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(!sb)return;const btn=$('loginBtn');btn.disabled=true;$('authMessage').textContent='Sedang login...';try{const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});if(error)throw error;await handleAuth();$('authMessage').textContent=''}catch(error){$('authMessage').textContent='Login gagal: '+errorText(error)}finally{btn.disabled=false}});
-// Ganti kata sandi akun sendiri: minta password lama, jangan simpan atau log password.
-function showPasswordForm(){
- if(!sb || !user){alertToast('Masuk terlebih dahulu untuk mengganti password.',true);return}
- openModal('Ganti Password',`<form id="passwordForm" autocomplete="off">
- <p class="dim">Password baru berlaku untuk akun yang sedang masuk.</p>
- <label for="oldAccountPassword">Password saat ini</label>
- <input type="password" id="oldAccountPassword" name="old_password" autocomplete="current-password" required minlength="6">
- <label for="newAccountPassword">Password baru (minimal 10 karakter)</label>
- <input type="password" id="newAccountPassword" name="new_password" autocomplete="new-password" required minlength="10">
- <label for="confirmAccountPassword">Ulangi password baru</label>
- <input type="password" id="confirmAccountPassword" name="confirm_password" autocomplete="new-password" required minlength="10">
- <div class="btnrow"><button class="primary" type="submit">Simpan Password Baru</button><button class="secondary" type="button" id="cancelForm">Batal</button></div>
- </form>`);
+// Autentikasi: password lama untuk ganti; email hanya untuk lupa password.
+let passwordChangeInProgress=false;
+let recoveryExpected=/(?:^|[&#?])type=recovery(?:[&#]|$)/.test(window.location.hash+window.location.search);
+function setAuthMode(mode, preserveMessage=false){
+ const titles={login:'Selamat Datang',password:'Ganti Password',forgot:'Lupa Password',reset:'Buat Password Baru'};
+ const descriptions={login:'Silakan masuk untuk melanjutkan.',password:'Masukkan email, password lama, dan password baru Anda.',forgot:'Kami akan mengirimkan tautan pemulihan ke email akun Anda.',reset:'Masukkan password baru Anda dari tautan pemulihan.'};
+ $('loginForm').dataset.mode=mode;
+ $('authTitle').textContent=titles[mode];$('authDescription').textContent=descriptions[mode];
+ $('emailFields').classList.toggle('hidden',mode==='reset');$('email').required=mode!=='reset';
+ $('loginPasswordFields').classList.toggle('hidden',mode==='forgot'||mode==='reset');
+ $('password').required=mode==='login'||mode==='password';
+ $('oldPasswordLabel').textContent=mode==='password'?'Password lama':'Password';
+ $('newPasswordFields').classList.toggle('hidden',mode!=='password'&&mode!=='reset');
+ for(const id of ['newAccountPassword','confirmAccountPassword']){$(id).required=mode==='password'||mode==='reset';$(id).value='';}
+ $('password').value='';
+ $('loginBtn').textContent=({login:'Masuk',password:'Simpan Password',forgot:'Kirim Tautan Reset',reset:'Simpan Password Baru'})[mode];
+ $('authLinks').classList.toggle('hidden',mode!=='login');
+ $('backToLogin').classList.toggle('hidden',mode==='login');
+ $('passwordModeToggle').setAttribute('aria-expanded',String(mode==='password'));
+ if(!preserveMessage)$('authMessage').textContent='';
 }
-async function changePassword(form){
- if(!sb||!user)throw Error('Sesi login berakhir. Masuk kembali.');
- const oldPass=form.elements.old_password.value;
- const nextPass=form.elements.new_password.value;
- const confirmPass=form.elements.confirm_password.value;
- if(nextPass.length<10)throw Error('Password baru minimal 10 karakter.');
- if(nextPass!==confirmPass)throw Error('Pengulangan password baru tidak sama.');
- if(nextPass===oldPass)throw Error('Password baru harus berbeda dari password lama.');
- const {data:checked,error:verifyError}=await sb.auth.signInWithPassword({email:user.email,password:oldPass});
- if(verifyError||checked?.user?.id!==user.id)throw Error('Password saat ini salah. Periksa lagi.');
- // Supabase melakukan pembaruan hanya untuk akun dengan sesi yang aktif.
- const {error:updateError}=await sb.auth.updateUser({password:nextPass,current_password:oldPass});
- if(updateError)throw updateError;
- form.reset();closeModal();alertToast('Password berhasil diganti. Gunakan password baru saat login berikutnya.');
-}
-$('changePasswordBtn').addEventListener('click',showPasswordForm);
+$('passwordModeToggle').addEventListener('click',()=>setAuthMode('password'));
+$('forgotPasswordToggle').addEventListener('click',()=>setAuthMode('forgot'));
+$('backToLogin').addEventListener('click',async()=>{
+ if($('loginForm').dataset.mode==='reset'&&sb){
+  const {error}=await sb.auth.signOut();
+  if(error){$('authMessage').textContent='Gagal keluar dari sesi pemulihan. Muat ulang halaman.';return;}
+ }
+ recoveryExpected=false;setAuthMode('login');
+});
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();if(!sb)return;
+ const btn=$('loginBtn'),mode=$('loginForm').dataset.mode;
+ btn.disabled=true;$('authMessage').textContent='Memproses...';
+ let verified=false,updated=false;
+ try{
+  const email=$('email').value.trim(),oldPass=$('password').value;
+  if(mode==='forgot'){
+   const redirectTo=window.location.origin+window.location.pathname;
+   const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo});if(error)throw error;
+   $('authMessage').textContent='Jika email terdaftar, tautan pemulihan akan dikirim. Periksa kotak masuk dan spam.';
+  }else if(mode==='password'||mode==='reset'){
+   const nextPass=$('newAccountPassword').value,confirmation=$('confirmAccountPassword').value;
+   if(nextPass.length<8)throw Error('Password baru minimal 8 karakter.');
+   if(nextPass!==confirmation)throw Error('Konfirmasi password baru tidak cocok.');
+   if(mode==='password'){
+    if(nextPass===oldPass)throw Error('Password baru harus berbeda dari password lama.');
+    passwordChangeInProgress=true;
+    const {data,error}=await sb.auth.signInWithPassword({email,password:oldPass});
+    if(error||!data?.user)throw Error('Email atau password lama salah.');
+    verified=true;
+   }else{
+    if(!recoveryExpected)throw Error('Tautan pemulihan belum terverifikasi. Silakan kirim ulang dari menu Lupa Password.');
+    const session=await sb.auth.getSession();
+    if(session.error||!session.data?.session)throw Error('Sesi pemulihan kedaluwarsa. Minta tautan baru.');
+    verified=true;
+   }
+   const {error}=await sb.auth.updateUser({password:nextPass});if(error)throw error;
+   updated=true;
+   const {error:signOutError}=await sb.auth.signOut();
+   if(signOutError){$('authMessage').textContent='Password mungkin sudah berubah, tetapi keluar otomatis gagal. Tutup halaman lalu masuk lagi.';return;}
+   recoveryExpected=false;setAuthMode('login');
+   $('authMessage').textContent='Password berhasil diganti. Silakan masuk menggunakan password baru.';
+  }else{
+   const {error}=await sb.auth.signInWithPassword({email,password:oldPass});if(error)throw error;
+   await handleAuth();$('authMessage').textContent='';
+  }
+ }catch(error){$('authMessage').textContent=(mode==='login'?'Login gagal: ':mode==='forgot'?'Gagal mengirim tautan: ':'Gagal mengganti password: ')+errorText(error);
+  if(mode==='password'&&verified){await sb.auth.signOut();}
+ }finally{
+  passwordChangeInProgress=false;
+  btn.disabled=false;
+ }
+});
 $('logoutBtn').addEventListener('click',()=>safeCall(async()=>{const {error}=await sb.auth.signOut();if(error)throw error;signedOut()}));
 $('navigation').addEventListener('click',e=>{let b=e.target.closest('[data-page]');if(b)goPage(b.dataset.page)});
 document.querySelectorAll('[data-refresh]').forEach(b=>b.addEventListener('click',()=>loadEverything()));
@@ -106,11 +161,20 @@ $('shipList').addEventListener('click',e=>{let b=e.target.closest('[data-edit-sh
 $('closeModal').addEventListener('click',closeModal);$('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
 $('modalBody').addEventListener('click',e=>{if(e.target.id==='addLine')$('poLines').insertAdjacentHTML('beforeend',poLine());if(e.target.closest('.remove-line'))e.target.closest('.itemrow').remove();if(e.target.id==='cancelForm')closeModal()});
 $('modalBody').addEventListener('change',e=>{if(e.target.id==='shipPo')refreshShipLines(e.target.value)});
-$('modalBody').addEventListener('submit',e=>{e.preventDefault();const form=e.target;const button=form.querySelector('[type=submit]');button.disabled=true;safeCall(async()=>{try{if(form.id==='poForm')await submitPO(form);else if(form.id==='shipForm')await submitShipment(form);else if(form.id==='passwordForm')await changePassword(form)}finally{button.disabled=false}})});
+$('modalBody').addEventListener('submit',e=>{e.preventDefault();const form=e.target;const button=form.querySelector('[type=submit]');button.disabled=true;safeCall(async()=>{try{if(form.id==='poForm')await submitPO(form);else if(form.id==='shipForm')await submitShipment(form);}finally{button.disabled=false}})});
 document.querySelectorAll('[data-master]').forEach(form=>form.addEventListener('submit',e=>{e.preventDefault();safeCall(()=>addMaster(form))}));
 $('master').addEventListener('click',e=>{let b=e.target.closest('[data-master-delete]');if(b)safeCall(()=>delMaster(b.dataset.masterDelete,b.dataset.id))});
 $('master').addEventListener('change',e=>{let s=e.target.closest('[data-profile-sales]');if(s)safeCall(()=>assignSales(s.dataset.profileSales,s.value))});
 $('exportPending').addEventListener('click',exportPending);$('exportReport').addEventListener('click',exportReport);$('printReport').addEventListener('click',()=>window.print());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&user)loadEverything()});
-if(configured && window.supabase?.createClient){sb=window.supabase.createClient(CONFIG.url.replace(/\/$/,''),CONFIG.publishableKey,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:false}});sb.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT')queueMicrotask(signedOut);if(event==='SIGNED_IN'&&(!user||user.id===undefined))queueMicrotask(()=>handleAuth())});handleAuth()}
+if(configured && window.supabase?.createClient){
+ if(recoveryExpected)setAuthMode('reset');
+ sb=window.supabase.createClient(CONFIG.url.replace(/\/$/,''),CONFIG.publishableKey,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});
+ sb.auth.onAuthStateChange((event)=>{
+  if(event==='PASSWORD_RECOVERY')queueMicrotask(()=>{recoveryExpected=true;setAuthMode('reset');$('authPage').classList.remove('hidden');$('app').classList.add('hidden');});
+  if(event==='SIGNED_OUT')queueMicrotask(()=>{signedOut();if(!passwordChangeInProgress&&!recoveryExpected)setAuthMode('login',true)});
+  if(event==='SIGNED_IN'&&!passwordChangeInProgress&&!recoveryExpected&&(!user||user.id===undefined))queueMicrotask(()=>handleAuth());
+ });
+ if(!recoveryExpected)handleAuth();
+}
 else{$('configNotice').classList.remove('hidden');$('loginBtn').disabled=true;$('authMessage').textContent=!window.supabase?'Library Supabase gagal dimuat. Periksa koneksi internet.':'Isi config.js untuk menghubungkan aplikasi ke Supabase.'}
